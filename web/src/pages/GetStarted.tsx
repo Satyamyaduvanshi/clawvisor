@@ -1,78 +1,9 @@
-/**
- * @file GetStarted.tsx
- * @description The "What is Clawvisor?" onboarding and quickstart page.
- * 
- * RECENT ARCHITECTURAL CHANGES & DEPRECATIONS:
- * 1. Scroll Spy: Replaced standard `IntersectionObserver` with a custom `useScrollSpy` window 
- *    scroll listener. This prevents sticky-positioning bugs caused by parent `overflow-clip` 
- *    containers and fixes the "short page" bug where bottom sections couldn't trigger the active state.
- * 2. Layouts: Upgraded the services/agents lists from a vertical stack to a 2-column grid (`md:grid-cols-2`) 
- *    for better screen real estate usage.
- * 3. Icons: Deprecated large inline SVGs for third-party services. We now use native `<img>` tags 
- *    pointing to `/public/logos/`. This keeps the React bundle small. Used `dark:invert` for 
- *    logos (like GitHub) that need to be visible on dark themes.
- */
-
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { api, type TaskSuggestion, type WelcomeData, type WelcomeService, type WelcomeAgent, type WalkthroughExample } from '../api/client'
 import { ServiceIcon } from '../components/ServiceIcon'
 import { useAuth } from '../hooks/useAuth'
-
-// ── Custom Hook for Scroll Spy ────────────────────────────────────────────────
-// Note: We use window.addEventListener('scroll') instead of IntersectionObserver
-// to accurately track sections even if parent layouts use tricky overflow properties.
-function useScrollSpy(sectionIds: string[], isLoading: boolean) {
-  const [activeId, setActiveId] = useState<string>(sectionIds[0] || '')
-
-  useEffect(() => {
-    // Suspend observation while the skeleton loader is rendering
-    if (isLoading) return;
-
-    const handleScroll = () => {
-      const elements = sectionIds.map(id => document.getElementById(id)).filter(Boolean)
-      if (elements.length === 0) return;
-
-      let currentActive: string = elements[0]?.id || '';
-
-      // 1. "Short Page" Protection: If the user hits the absolute bottom of the page, 
-      // force the last section to be active regardless of the detection line.
-      const isAtBottom = window.innerHeight + Math.round(window.scrollY) >= document.body.offsetHeight - 50;
-      if (isAtBottom) {
-        setActiveId(sectionIds[sectionIds.length - 1]);
-        return;
-      }
-
-      // 2. Standard Detection: Find the lowest element that has crossed the detection line
-      // (Set to 40% down from the top of the viewport)
-      const detectionLine = window.innerHeight * 0.4;
-      
-      for (const el of elements) {
-        if (!el) continue;
-        const rect = el.getBoundingClientRect();
-        if (rect.top <= detectionLine) {
-          currentActive = el.id;
-        }
-      }
-
-      setActiveId(currentActive);
-    };
-
-    // Small delay ensures the real DOM nodes have painted after loading finishes
-    const timeoutId = setTimeout(() => {
-      window.addEventListener('scroll', handleScroll, { passive: true });
-      handleScroll(); // Trigger once to set initial state
-    }, 100);
-
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, [JSON.stringify(sectionIds), isLoading]);
-
-  return activeId || sectionIds[0];
-}
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
@@ -87,17 +18,17 @@ export default function GetStarted() {
   const ready = !!data?.ready
   const services = data?.services ?? []
   const agents = data?.agents ?? []
-
-  // Dynamically define sidebar sections based on whether the user has completed setup
-  const sectionIds = ready 
+  
+  const sectionIds = useMemo(() => ready 
     ? ['overview', 'suggestions', 'your-setup', 'how-it-works']
-    : ['overview', 'connect-service', 'connect-agent', 'how-it-works']
+    : ['overview', 'connect-service', 'connect-agent', 'how-it-works'], 
+  [ready])
     
   const activeSection = useScrollSpy(sectionIds, isLoading)
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 py-10 ">
-      <div className="flex gap-10 xl:gap-16 items-start">
+    <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 py-10 scroll-smooth">
+      <div className="flex gap-8 lg:gap-10 xl:gap-16 items-start">
 
         {/* ── Main content column ── */}
         <div className="flex-1 min-w-0 space-y-14">
@@ -120,11 +51,12 @@ export default function GetStarted() {
         </div>
 
         {/* ── "On this page" right sidebar ── */}
-        <aside className="hidden xl:block w-48 shrink-0 sticky top-24 self-start max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-text-tertiary mb-3">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-6">
+        <aside className="hidden lg:block w-48 shrink-0 sticky top-24 self-start max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-text-tertiary mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-3.5 h-3.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
             </svg>
+            On this page
           </p>
           <nav className="flex flex-col gap-0.5">
             <PageIndexLink 
@@ -210,27 +142,6 @@ function PageIndexLink({
       {label}
     </a>
   )
-}
-
-// ── Sidebar Icons ─────────────────────────────────────────────────────────────
-
-function InfoIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
-}
-function SparklesIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5z" /></svg>
-}
-function GridIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
-}
-function PlugIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 22v-5M9 8V2M15 8V2M19 13c0 2-2 4-7 4s-7-2-7-4V8h14v5z" /></svg>
-}
-function BotIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2" /><circle cx="12" cy="5" r="2" /><path d="M12 7v4M8 16h.01M16 16h.01" /></svg>
-}
-function TaskIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
 }
 
 // ── Loading state ─────────────────────────────────────────────────────────────
@@ -344,8 +255,8 @@ function SetupSteps({
   return (
     <section className="space-y-6">
       {!isLoading && (
-        <h2 className="text-xl font-semibold text-text-primary tracking-tight">
-          Complete your workspace setup
+       <h2 className="text-xl font-semibold text-text-primary tracking-tight">
+          {hasService ? 'Continue your workspace setup' : 'Complete your workspace setup'}
         </h2>
       )}
 
@@ -360,7 +271,6 @@ function SetupSteps({
           <ConnectedServicesStrip services={services} />
         ) : (
           <>
-            {/* Note: Switched to grid-cols-2 for better horizontal screen real estate */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
               <ServiceRow
                 id="google.gmail"
@@ -372,7 +282,6 @@ function SetupSteps({
                 id="github"
                 label="GitHub"
                 description="Open issues, review PRs, push commits"
-                /* dark:invert handles visibility for black logos in dark mode natively */
                 icon={<img src="/logos/github.svg" alt="GitHub" className="w-5 h-5 object-contain dark:invert" />}
               />
               <ServiceRow
@@ -388,19 +297,11 @@ function SetupSteps({
                 icon={<img src="/logos/google-calendar.svg" alt="Google Calendar" className="w-5 h-5 object-contain" />}
               />
             </div>
-            <Link
-              to="/dashboard/accounts"
+            <Link 
+              to="/dashboard/accounts" 
               className="inline-flex items-center gap-1.5 text-sm font-medium text-brand hover:text-brand-strong px-3.5 py-2 rounded-lg border border-brand/40 bg-brand-muted transition-colors"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path 
-                  d="M17 14V20M14 17H20M15.6 10H18.4C18.9601 10 19.2401 10 19.454 9.89101C19.6422 9.79513 19.7951 9.64215 19.891 9.45399C20 9.24008 20 8.96005 20 8.4V5.6C20 5.03995 20 4.75992 19.891 4.54601C19.7951 4.35785 19.6422 4.20487 19.454 4.10899C19.2401 4 18.9601 4 18.4 4H15.6C15.0399 4 14.7599 4 14.546 4.10899C14.3578 4.20487 14.2049 4.35785 14.109 4.54601C14 4.75992 14 5.03995 14 5.6V8.4C14 8.96005 14 9.24008 14.109 9.45399C14.2049 9.64215 14.3578 9.79513 14.546 9.89101C14.7599 10 15.0399 10 15.6 10ZM5.6 10H8.4C8.96005 10 9.24008 10 9.45399 9.89101C9.64215 9.79513 9.79513 9.64215 9.89101 9.45399C10 9.24008 10 8.96005 10 8.4V5.6C10 5.03995 10 4.75992 9.89101 4.54601C9.79513 4.35785 9.64215 4.20487 9.45399 4.10899C9.24008 4 8.96005 4 8.4 4H5.6C5.03995 4 4.75992 4 4.54601 4.10899C4.35785 4.20487 4.20487 4.35785 4.10899 4.54601C4 4.75992 4 5.03995 4 5.6V8.4C4 8.96005 4 9.24008 4.10899 9.45399C4.20487 9.64215 4.35785 9.79513 4.54601 9.89101C4.75992 10 5.03995 10 5.6 10ZM5.6 20H8.4C8.96005 20 9.24008 20 9.45399 19.891C9.64215 19.7951 9.79513 19.6422 9.89101 19.454C10 19.2401 10 18.9601 10 18.4V15.6C10 15.0399 10 14.7599 9.89101 14.546C9.79513 14.3578 9.64215 14.2049 9.45399 14.109C9.24008 14 8.96005 14 8.4 14H5.6C5.03995 14 4.75992 14 4.54601 14.109C4.35785 14.2049 4.20487 14.3578 4.10899 14.546C4 14.7599 4 15.0399 4 15.6V18.4C4 18.9601 4 19.2401 4.10899 19.454C4.20487 19.6422 4.35785 19.7951 4.54601 19.891C4.75992 20 5.03995 20 5.6 20Z" 
-                  stroke="currentColor" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                />
-              </svg>
+              >
+              <GridAppIcon className="w-4 h-4" />
               Browse all services
             </Link>
           </>
@@ -417,10 +318,30 @@ function SetupSteps({
           <ConnectedAgentsStrip agents={agents} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <AgentRow tab="claude-code"    label="Claude Code"    description="CLI-based coding agent"    icon={<ClaudeCodeIcon />} />
-            <AgentRow tab="claude-desktop" label="Claude Desktop" description="Desktop app agent"         icon={<ClaudeDesktopIcon />} />
-            <AgentRow tab="openclaw"       label="OpenClaw"       description="Open-source client"        icon={<OpenClawIcon />} />
-            <AgentRow tab="other"          label="Other agents"   description="Any HTTP client"           icon={<OtherAgentIcon />} />
+            <AgentRow 
+              tab="claude-code"    
+              label="Claude Code"    
+              description="CLI-based coding agent" 
+              icon={<img src="/logos/claude-color.svg" alt="Claude Code" className="w-5 h-5 object-contain" />}
+            />
+            <AgentRow 
+              tab="claude-desktop" 
+              label="Claude Desktop" 
+              description="Desktop app agent" 
+              icon={<img src="/logos/claude-color.svg" alt="Claude Desktop" className="w-5 h-5 object-contain" />}
+            />
+            <AgentRow 
+              tab="openclaw"       
+              label="OpenClaw"       
+              description="Open-source client" 
+              icon={<img src="/logos/openclaw.svg" alt="OpenClaw" className="w-5 h-5 object-contain" />}
+            />
+            <AgentRow 
+              tab="other"          
+              label="Other agents"   
+              description="Any HTTP client" 
+              icon={<OtherAgentIcon className="w-5 h-5 text-text-tertiary" />}
+            />
           </div>
         )}
       </SetupStepCard>
@@ -453,7 +374,7 @@ function ServiceRow({
         <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">{description}</p>
       </div>
       <svg className="w-4 h-4 text-text-tertiary shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="M9 5l7 7-7 7" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
       </svg>
     </Link>
   )
@@ -468,65 +389,26 @@ function AgentRow({
   tab: string
   label: string
   description: string
-  icon: ReactNode
+  icon?: ReactNode
 }) {
   return (
     <Link
       to={`/dashboard/agents?agent=${encodeURIComponent(tab)}`}
       className="flex items-center gap-4 rounded-xl border border-border-subtle bg-surface-0 hover:bg-surface-1 hover:border-border-secondary px-4 py-3.5 transition-colors group"
     >
-      <div className="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center bg-brand-muted transition-colors overflow-hidden">
-        {icon}
-      </div>
+      {icon && (
+        <div className="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center bg-surface-1 group-hover:bg-surface-2 transition-colors overflow-hidden">
+          {icon}
+        </div>
+      )}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-text-primary">{label}</p>
         <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">{description}</p>
       </div>
       <svg className="w-4 h-4 text-text-tertiary shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="M9 5l7 7-7 7" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
       </svg>
     </Link>
-  )
-}
-
-// ── Agent Inline SVGs ─────────────────────────────────────────────────────────
-
-function ClaudeCodeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="24" height="24" rx="6" fill="#7F77DD"/>
-      <path d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 6l-4 12" stroke="#fff" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-}
-
-function ClaudeDesktopIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="24" height="24" rx="6" fill="#7F77DD"/>
-      <rect x="4" y="5" width="16" height="10" rx="1.5" stroke="#fff" strokeWidth="1.5"/>
-      <path d="M8 19h8M12 15v4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
-  )
-}
-
-function OpenClawIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="24" height="24" rx="6" fill="#534AB7"/>
-      <path d="M12 5C8.5 5 6 7.5 6 10c0 1.5.7 2.8 1.8 3.7L6.5 19h11l-1.3-5.3C17.3 12.8 18 11.5 18 10c0-2.5-2.5-5-6-5z" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round"/>
-      <circle cx="9.5" cy="10" r="1" fill="#fff"/>
-      <circle cx="14.5" cy="10" r="1" fill="#fff"/>
-    </svg>
-  )
-}
-
-function OtherAgentIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="24" height="24" rx="6" fill="#888780"/>
-      <path d="M7 8h10M7 12h10M7 16h6" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
   )
 }
 
@@ -540,7 +422,10 @@ function ConnectedServicesStrip({ services }: { services: WelcomeService[] }) {
           key={`${s.id}:${s.alias ?? ''}`}
           className="flex items-center gap-2 bg-surface-0 border border-border-subtle px-2.5 py-1.5 rounded-md"
         >
-          <ServiceIcon iconUrl={s.icon_url} iconSvg={s.icon_svg} serviceId={s.id} size={16} />
+          {/* Automatically invert the logo in dark mode if it is GitHub */}
+          <div className={s.id === 'github' ? 'dark:invert' : ''}>
+            <ServiceIcon iconUrl={s.icon_url} iconSvg={s.icon_svg} serviceId={s.id} size={16} />
+          </div>
           <span className="text-sm text-text-primary">{s.name}</span>
           {s.alias && <span className="text-xs text-text-tertiary">({s.alias})</span>}
         </div>
@@ -563,11 +448,7 @@ function ConnectedAgentsStrip({ agents }: { agents: WelcomeAgent[] }) {
           key={a.id}
           className="flex items-center gap-2 bg-surface-0 border border-border-subtle px-2.5 py-1.5 rounded-md"
         >
-          <svg className="w-4 h-4 text-text-tertiary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <rect x="3" y="11" width="18" height="10" rx="2" ry="2" />
-            <circle cx="12" cy="5" r="2" />
-            <path d="M12 7v4M8 16h.01M16 16h.01" />
-          </svg>
+          <BotIcon />
           <span className="text-sm font-mono text-text-primary">{a.name}</span>
         </div>
       ))}
@@ -619,7 +500,7 @@ function SetupStepCard({
             <span>{num}</span>
           )}
         </div>
-        <h2 className="font-semibold text-base text-text-primary flex-1">{title}</h2>
+        <h3 className="font-semibold text-base text-text-primary flex-1">{title}</h3>
         {loading ? (
           <span className="text-xs text-text-tertiary">checking…</span>
         ) : done ? (
@@ -776,7 +657,11 @@ function SuggestionCard({
                 className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-surface-0 border border-border-subtle text-text-tertiary"
                 title={svc?.name ?? id}
               >
-                {svc && <ServiceIcon iconUrl={svc.icon_url} iconSvg={svc.icon_svg} serviceId={id} size={11} />}
+                {svc && (
+                  <div className={id === 'github' ? 'dark:invert' : ''}>
+                    <ServiceIcon iconUrl={svc.icon_url} iconSvg={svc.icon_svg} serviceId={id} size={11} />
+                  </div>
+                )}
                 <span>{svc?.name ?? id}</span>
               </span>
             )
@@ -896,7 +781,7 @@ function ExampleWalkthrough({ example }: { example?: WalkthroughExample }) {
   const steps: { label: string; body: string; detail?: string }[] = [
     {
       label: 'You ask',
-      body: `${ex.user_prompt}`,
+      body: `"${ex.user_prompt}"`,
     },
     {
       label: 'Agent declares a task',
@@ -960,17 +845,7 @@ function ExampleWalkthrough({ example }: { example?: WalkthroughExample }) {
       </ol>
 
       <div className="mt-8 flex items-start gap-3 rounded-xl border border-brand/30 bg-brand-muted p-4 text-sm text-text-secondary leading-relaxed shadow-sm">
-        <svg 
-          xmlns="http://www.w3.org/2000/svg" 
-          fill="none" 
-          viewBox="0 0 24 24" 
-          strokeWidth="1.5" 
-          stroke="currentColor" 
-          className="w-5 h-5 shrink-0 text-brand mt-0.5"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.25-8.25-3.286Zm0 13.036h.008v.008H12v-.008Z" />
-        </svg>
-
+        <ShieldCheckIcon className="w-5 h-5 shrink-0 text-brand mt-0.5" />
         <div>
           <span className="font-semibold text-brand">Three layers of control</span> check every request,
           in order: <span className="font-medium text-text-primary">restrictions</span> (hard blocks you
@@ -981,5 +856,100 @@ function ExampleWalkthrough({ example }: { example?: WalkthroughExample }) {
         </div>
       </div>
     </section>
+  )
+}
+
+// ── Custom Hook for Scroll Spy ────────────────────────────────────────────────
+function useScrollSpy(sectionIds: string[], isLoading: boolean) {
+  const [activeId, setActiveId] = useState<string>(sectionIds[0] || '')
+
+  useEffect(() => {
+    if (isLoading) return;
+    const scrollContainer = document.querySelector('main') || window;
+
+    const handleScroll = () => {
+      const elements = sectionIds.map(id => document.getElementById(id)).filter(Boolean)
+      if (elements.length === 0) return;
+
+      let currentActive: string = elements[0]?.id || '';
+
+      const isWindow = scrollContainer === window;
+      const scrollY = isWindow ? window.scrollY : (scrollContainer as HTMLElement).scrollTop;
+      const containerHeight = isWindow ? window.innerHeight : (scrollContainer as HTMLElement).clientHeight;
+      const scrollHeight = isWindow ? document.body.offsetHeight : (scrollContainer as HTMLElement).scrollHeight;
+
+      const isAtBottom = containerHeight + Math.round(scrollY) >= scrollHeight - 50;
+      if (isAtBottom) {
+        setActiveId(sectionIds[sectionIds.length - 1]);
+        return;
+      }
+      const detectionLine = window.innerHeight * 0.4;
+      
+      for (const el of elements) {
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.top <= detectionLine) {
+          currentActive = el.id;
+        }
+      }
+
+      setActiveId(currentActive);
+    };
+
+    const rafId = requestAnimationFrame(() => handleScroll());
+    
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll, { passive: true });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      scrollContainer.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [sectionIds, isLoading]);
+
+  return activeId || sectionIds[0];
+}
+
+
+// ── Shared Icons ─────────────────────────
+
+export function InfoIcon() {
+  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
+}
+export function SparklesIcon() {
+  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5z" /></svg>
+}
+export function GridIcon() {
+  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
+}
+export function PlugIcon() {
+  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 22v-5M9 8V2M15 8V2M19 13c0 2-2 4-7 4s-7-2-7-4V8h14v5z" /></svg>
+}
+export function BotIcon() {
+  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2" /><circle cx="12" cy="5" r="2" /><path d="M12 7v4M8 16h.01M16 16h.01" /></svg>
+}
+export function TaskIcon() {
+  return <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+}
+export function GridAppIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+     <path d="M17 14V20M14 17H20M15.6 10H18.4C18.9601 10 19.2401 10 19.454 9.89101C19.6422 9.79513 19.7951 9.64215 19.891 9.45399C20 9.24008 20 8.96005 20 8.4V5.6C20 5.03995 20 4.75992 19.891 4.54601C19.7951 4.35785 19.6422 4.20487 19.454 4.10899C19.2401 4 18.9601 4 18.4 4H15.6C15.0399 4 14.7599 4 14.546 4.10899C14.3578 4.20487 14.2049 4.35785 14.109 4.54601C14 4.75992 14 5.03995 14 5.6V8.4C14 8.96005 14 9.24008 14.109 9.45399C14.2049 9.64215 14.3578 9.79513 14.546 9.89101C14.7599 10 15.0399 10 15.6 10ZM5.6 10H8.4C8.96005 10 9.24008 10 9.45399 9.89101C9.64215 9.79513 9.79513 9.64215 9.89101 9.45399C10 9.24008 10 8.96005 10 8.4V5.6C10 5.03995 10 4.75992 9.89101 4.54601C9.79513 4.35785 9.64215 4.20487 9.45399 4.10899C9.24008 4 8.96005 4 8.4 4H5.6C5.03995 4 4.75992 4 4.54601 4.10899C4.35785 4.20487 4.20487 4.35785 4.10899 4.54601C4 4.75992 4 5.03995 4 5.6V8.4C4 8.96005 4 9.24008 4.10899 9.45399C4.20487 9.64215 4.35785 9.79513 4.54601 9.89101C4.75992 10 5.03995 10 5.6 10ZM5.6 20H8.4C8.96005 20 9.24008 20 9.45399 19.891C9.64215 19.7951 9.79513 19.6422 9.89101 19.454C10 19.2401 10 18.9601 10 18.4V15.6C10 15.0399 10 14.7599 9.89101 14.546C9.79513 14.3578 9.64215 14.2049 9.45399 14.109C9.24008 14 8.96005 14 8.4 14H5.6C5.03995 14 4.75992 14 4.54601 14.109C4.35785 14.2049 4.20487 14.3578 4.10899 14.546C4 14.7599 4 15.0399 4 15.6V18.4C4 18.9601 4 19.2401 4.10899 19.454C4.20487 19.6422 4.35785 19.7951 4.54601 19.891C4.75992 20 5.03995 20 5.6 20Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+export function OtherAgentIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+      <path d="M7 8h10M7 12h10M7 16h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
+export function ShieldCheckIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.25-8.25-3.286Zm0 13.036h.008v.008H12v-.008Z" />
+    </svg>
   )
 }
